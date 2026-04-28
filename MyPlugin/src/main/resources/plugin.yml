@@ -1,0 +1,10 @@
+name: MyPlugin
+version: 1.0
+main: your.package.MyPlugin
+commands:
+  rutsike:
+    description: Activate rutsike
+    usage: /rutsike
+permissions:
+  rutsike.use:
+    default: op

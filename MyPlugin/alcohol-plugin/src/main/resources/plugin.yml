@@ -1,0 +1,6 @@
+name: AlcoholPlugin
+version: 1.0
+main: me.yourname.alcohol.AlcoholPlugin
+api-version: 1.20
+description: A Minecraft plugin for alcohol mechanics
+author: yourname
