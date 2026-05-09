@@ -1,0 +1,505 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+	<External>NULL</External>
+	<External>nil</External>
+	<Item class="ModuleScript" referent="RBX0">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<string name="Name">SlimeRNG</string>
+			<string name="Source">--[[
+    Slime RNG - A luck-based grinding game
+    Core mechanics: Rolling, collecting, team building, auto-fighting, progression
+]]
+
+local SlimeRNG = {}
+SlimeRNG.__index = SlimeRNG
+
+-- ============================================================================
+-- RARITY SYSTEM
+-- ============================================================================
+local RARITIES = {
+    COMMON = {
+        name = "Common",
+        color = Color3.fromRGB(200, 200, 200),
+        weight = 50,
+        multiplier = 1,
+    },
+    UNCOMMON = {
+        name = "Uncommon",
+        color = Color3.fromRGB(0, 255, 0),
+        weight = 30,
+        multiplier = 1.5,
+    },
+    RARE = {
+        name = "Rare",
+        color = Color3.fromRGB(0, 0, 255),
+        weight = 12,
+        multiplier = 2,
+    },
+    EPIC = {
+        name = "Epic",
+        color = Color3.fromRGB(128, 0, 255),
+        weight = 6,
+        multiplier = 3,
+    },
+    LEGENDARY = {
+        name = "Legendary",
+        color = Color3.fromRGB(255, 165, 0),
+        weight = 1.8,
+        multiplier = 5,
+    },
+    MYTHIC = {
+        name = "Mythic",
+        color = Color3.fromRGB(255, 0, 0),
+        weight = 0.2,
+        multiplier = 10,
+    },
+}
+
+-- ============================================================================
+-- SLIME TYPES
+-- ============================================================================
+local SLIME_TYPES = {
+    "Fire", "Water", "Earth", "Wind", "Light", "Dark",
+    "Ice", "Magma", "Storm", "Nature", "Crystal", "Shadow"
+}
+
+-- ============================================================================
+-- SLIME CLASS
+-- ============================================================================
+local Slime = {}
+Slime.__index = Slime
+
+function Slime.new(slimeType, rarity, level)
+    local self = setmetatable({}, Slime)
+    self.id = math.random(100000, 999999)
+    self.type = slimeType or SLIME_TYPES[math.random(1, #SLIME_TYPES)]
+    self.rarity = rarity or "COMMON"
+    self.level = level or 1
+    self.experience = 0
+    self.stats = {
+        attack = (RARITIES[rarity].multiplier or 1) * level * 10,
+        defense = (RARITIES[rarity].multiplier or 1) * level * 8,
+        hp = (RARITIES[rarity].multiplier or 1) * level * 15,
+    }
+    return self
+end
+
+function Slime:getName()
+    return string.format("[%s] %s Slime Lv%d", RARITIES[self.rarity].name, self.type, self.level)
+end
+
+function Slime:getStats()
+    return {
+        attack = self.stats.attack,
+        defense = self.stats.defense,
+        hp = self.stats.hp,
+        total = self.stats.attack + self.stats.defense + self.stats.hp,
+    }
+end
+
+function Slime:gainExperience(amount)
+    self.experience = self.experience + amount
+    if self.experience >= 100 then
+        self:levelUp()
+    end
+end
+
+function Slime:levelUp()
+    self.level = self.level + 1
+    self.experience = 0
+    self.stats.attack = self.stats.attack * 1.15
+    self.stats.defense = self.stats.defense * 1.15
+    self.stats.hp = self.stats.hp * 1.15
+end
+
+-- ============================================================================
+-- MAIN GAME CLASS
+-- ============================================================================
+function SlimeRNG.new()
+    local self = setmetatable({}, SlimeRNG)
+    
+    -- Player stats
+    self.coins = 1000
+    self.goop = 0
+    self.level = 1
+    self.experience = 0
+    
+    -- Collections
+    self.slimes = {}
+    self.team = {}
+    self.teamSize = 0
+    
+    -- Upgrades
+    self.upgrades = {
+        autoRoll = { level = 0, cost = 100 },
+        luckBoost = { level = 0, cost = 50 },
+        enemyScaling = { level = 0, cost = 75 },
+        coinMultiplier = { level = 0, cost = 60 },
+        rollRate = { level = 0, cost = 80 },
+    }
+    
+    -- Stats
+    self.totalRolls = 0
+    self.rarityPulls = {
+        COMMON = 0, UNCOMMON = 0, RARE = 0,
+        EPIC = 0, LEGENDARY = 0, MYTHIC = 0
+    }
+    self.rollCost = 100
+    self.baseLuckMultiplier = 1
+    self.totalFights = 0
+    self.totalCoinsEarned = 0
+    
+    -- Worlds
+    self.currentWorld = 1
+    self.worlds = {
+        { name = "Slimey Fields", level = 1, luckBoost = 1 },
+        { name = "Crystal Caves", level = 5, luckBoost = 1.2 },
+        { name = "Magma Fortress", level = 10, luckBoost = 1.4 },
+        { name = "Shadow Realm", level = 15, luckBoost = 1.6 },
+        { name = "Celestial Peak", level = 20, luckBoost = 1.8 },
+    }
+    
+    self.rebirths = 0
+    
+    return self
+end
+
+function SlimeRNG:getRarityFromWeights(luckMultiplier)
+    local rarityList = {
+        "COMMON", "UNCOMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"
+    }
+    
+    local totalWeight = 0
+    local adjustedWeights = {}
+    
+    for _, rarityKey in ipairs(rarityList) do
+        local rarity = RARITIES[rarityKey]
+        local adjustedWeight = rarity.weight * (rarityKey == "MYTHIC" and luckMultiplier or (1 + (luckMultiplier - 1) * 0.3))
+        adjustedWeights[rarityKey] = adjustedWeight
+        totalWeight = totalWeight + adjustedWeight
+    end
+    
+    local rand = math.random() * totalWeight
+    local current = 0
+    
+    for _, rarityKey in ipairs(rarityList) do
+        current = current + adjustedWeights[rarityKey]
+        if rand <= current then
+            return rarityKey
+        end
+    end
+    
+    return "COMMON"
+end
+
+function SlimeRNG:roll()
+    if self.coins < self.rollCost then
+        return nil, "Not enough coins! Need " .. self.rollCost .. ", have " .. self.coins
+    end
+    
+    self.coins = self.coins - self.rollCost
+    self.totalRolls = self.totalRolls + 1
+    
+    local luckMultiplier = self.baseLuckMultiplier + (self.upgrades.luckBoost.level * 0.1)
+    local rarity = self:getRarityFromWeights(luckMultiplier)
+    
+    self.rarityPulls[rarity] = self.rarityPulls[rarity] + 1
+    
+    local slime = Slime.new(
+        SLIME_TYPES[math.random(1, #SLIME_TYPES)],
+        rarity,
+        self.worlds[self.currentWorld].level + math.random(0, 3)
+    )
+    
+    table.insert(self.slimes, slime)
+    
+    return slime
+end
+
+function SlimeRNG:quickRoll(amount)
+    local results = {}
+    for i = 1, amount do
+        local slime = self:roll()
+        if slime then
+            table.insert(results, slime)
+        end
+    end
+    return results
+end
+
+function SlimeRNG:addToTeam(slimeId)
+    if self.teamSize >= 5 then
+        return false, "Team is full! Max 5 slimes"
+    end
+    
+    for _, slime in ipairs(self.slimes) do
+        if slime.id == slimeId then
+            table.insert(self.team, slime)
+            self.teamSize = self.teamSize + 1
+            return true, slime:getName() .. " added to team!"
+        end
+    end
+    
+    return false, "Slime not found"
+end
+
+function SlimeRNG:removeFromTeam(index)
+    if index < 1 or index > #self.team then
+        return false, "Invalid team position"
+    end
+    table.remove(self.team, index)
+    self.teamSize = self.teamSize - 1
+    return true, "Slime removed from team"
+end
+
+function SlimeRNG:getTeamStats()
+    local total = {
+        attack = 0, defense = 0, hp = 0, level = 0
+    }
+    
+    for _, slime in ipairs(self.team) do
+        local stats = slime:getStats()
+        total.attack = total.attack + stats.attack
+        total.defense = total.defense + stats.defense
+        total.hp = total.hp + stats.hp
+        total.level = total.level + slime.level
+    end
+    
+    return total
+end
+
+function SlimeRNG:fight()
+    if self.teamSize == 0 then
+        return nil, "Team is empty!"
+    end
+    
+    local teamStats = self:getTeamStats()
+    local enemyLevel = self.worlds[self.currentWorld].level + math.random(1, 5)
+    local enemyStats = {
+        attack = enemyLevel * 12,
+        defense = enemyLevel * 10,
+        hp = enemyLevel * 20,
+    }
+    
+    local teamPower = teamStats.attack + teamStats.defense + teamStats.hp
+    local enemyPower = enemyStats.attack + enemyStats.defense + enemyStats.hp
+    
+    local reward = 0
+    local won = false
+    
+    if teamPower > enemyPower then
+        won = true
+        reward = math.floor(50 * (1 + self.upgrades.coinMultiplier.level * 0.2) * self.worlds[self.currentWorld].luckBoost)
+        self.coins = self.coins + reward
+        self.totalCoinsEarned = self.totalCoinsEarned + reward
+        
+        for _, slime in ipairs(self.team) do
+            slime:gainExperience(math.floor(10 + enemyLevel * 0.5))
+        end
+    else
+        reward = math.floor(10 * self.worlds[self.currentWorld].luckBoost)
+        self.coins = self.coins + reward
+        self.totalCoinsEarned = self.totalCoinsEarned + reward
+    end
+    
+    self.totalFights = self.totalFights + 1
+    
+    return {
+        won = won,
+        reward = reward,
+        enemyLevel = enemyLevel,
+        teamPower = teamPower,
+        enemyPower = enemyPower,
+    }
+end
+
+function SlimeRNG:autoFight(times)
+    local results = {
+        wins = 0,
+        totalCoins = 0,
+    }
+    
+    for i = 1, times do
+        local result = self:fight()
+        if result then
+            if result.won then results.wins = results.wins + 1 end
+            results.totalCoins = results.totalCoins + result.reward
+        end
+    end
+    
+    return results
+end
+
+function SlimeRNG:purchaseUpgrade(upgradeName)
+    local upgrade = self.upgrades[upgradeName]
+    if not upgrade then
+        return false, "Upgrade not found"
+    end
+    
+    local cost = upgrade.cost * (upgrade.level + 1)
+    
+    if self.coins < cost then
+        return false, "Not enough coins! Need " .. cost .. ", have " .. self.coins
+    end
+    
+    self.coins = self.coins - cost
+    upgrade.level = upgrade.level + 1
+    
+    if upgradeName == "rollRate" then
+        self.rollCost = math.floor(100 / (1 + upgrade.level * 0.1))
+    elseif upgradeName == "luckBoost" then
+        self.baseLuckMultiplier = 1 + (upgrade.level * 0.15)
+    end
+    
+    return true, upgradeName .. " upgraded to level " .. upgrade.level
+end
+
+function SlimeRNG:unlockNextWorld()
+    if self.currentWorld >= #self.worlds then
+        return false, "Already at final world"
+    end
+    
+    self.currentWorld = self.currentWorld + 1
+    return true, "Unlocked " .. self.worlds[self.currentWorld].name
+end
+
+function SlimeRNG:rebirth()
+    if self.totalCoinsEarned < 10000 then
+        return false, "Need 10,000 coins earned to rebirth"
+    end
+    
+    self.rebirths = self.rebirths + 1
+    self.baseLuckMultiplier = 1 + (self.rebirths * 0.2)
+    self.goop = self.goop + (self.rebirths * 100)
+    
+    self.coins = 1000
+    self.slimes = {}
+    self.team = {}
+    self.teamSize = 0
+    self.totalRolls = 0
+    self.totalFights = 0
+    self.currentWorld = 1
+    self.totalCoinsEarned = 0
+    
+    for name, upgrade in pairs(self.upgrades) do
+        upgrade.level = math.floor(upgrade.level * 0.5)
+    end
+    
+    return true, "Rebirth successful! Luck multiplier: x" .. string.format("%.2f", self.baseLuckMultiplier)
+end
+
+function SlimeRNG:getPlayerStats()
+    return {
+        coins = self.coins,
+        goop = self.goop,
+        level = self.level,
+        totalRolls = self.totalRolls,
+        totalFights = self.totalFights,
+        totalCoinsEarned = self.totalCoinsEarned,
+        slimesOwned = #self.slimes,
+        teamSize = self.teamSize,
+        currentWorld = self.worlds[self.currentWorld].name,
+        rebirths = self.rebirths,
+        luckMultiplier = string.format("x%.2f", self.baseLuckMultiplier),
+    }
+end
+
+function SlimeRNG:displaySlimeCollection()
+    local rarityCount = {}
+    for _, slime in ipairs(self.slimes) do
+        rarityCount[slime.rarity] = (rarityCount[slime.rarity] or 0) + 1
+    end
+    
+    return rarityCount
+end
+
+function SlimeRNG:displayInventory(page, perPage)
+    page = page or 1
+    perPage = perPage or 10
+    
+    local start = (page - 1) * perPage + 1
+    local endIdx = math.min(start + perPage - 1, #self.slimes)
+    
+    local inventory = {}
+    for i = start, endIdx do
+        if self.slimes[i] then
+            table.insert(inventory, {
+                index = i,
+                name = self.slimes[i]:getName(),
+                stats = self.slimes[i]:getStats(),
+            })
+        end
+    end
+    
+    return inventory, math.ceil(#self.slimes / perPage)
+end
+
+return SlimeRNG
+</string>
+		</Properties>
+	</Item>
+	<Item class="Script" referent="RBX1">
+		<Properties>
+			<Content name="LinkedSource"><null></null></Content>
+			<string name="Name">TestScript</string>
+			<string name="Source">local SlimeRNG = require(script.Parent:WaitForChild("SlimeRNG"))
+
+-- Initialize the game
+local game = SlimeRNG.new()
+
+print("=== SLIME RNG DEMO ===\n")
+
+-- Rolling
+print("Rolling 5 slimes...")
+local rolls = game:quickRoll(5)
+for i, slime in ipairs(rolls) do
+    print("  " .. i .. ". " .. slime:getName())
+end
+
+-- Build team
+print("\nBuilding team...")
+for i = 1, math.min(3, #game.slimes) do
+    game:addToTeam(game.slimes[i].id)
+end
+print("Team size: " .. game.teamSize)
+
+-- Fight
+print("\nFighting enemies...")
+for i = 1, 5 do
+    local result = game:fight()
+    if result then
+        local status = result.won and "WON" or "LOST"
+        print("  Fight " .. i .. ": " .. status .. " | Earned: " .. result.reward .. " coins")
+    end
+end
+
+-- Upgrades
+print("\nPurchasing upgrades...")
+game:purchaseUpgrade("rollRate")
+game:purchaseUpgrade("luckBoost")
+
+-- Player Stats
+print("\nPlayer Stats:")
+local stats = game:getPlayerStats()
+for key, value in pairs(stats) do
+    print("  " .. key .. ": " .. tostring(value))
+end
+
+-- Collection
+print("\nRarity Collection:")
+local collection = game:displaySlimeCollection()
+for rarity, count in pairs(collection) do
+    print("  " .. rarity .. ": " .. count)
+end
+
+-- Auto Fight
+print("\nAuto fighting 10 times...")
+local autoResult = game:autoFight(10)
+print("  Wins: " .. autoResult.wins .. " | Total Coins: " .. autoResult.totalCoins)
+
+print("\n=== DEMO COMPLETE ===")
+</string>
+		</Properties>
+	</Item>
+</roblox>
